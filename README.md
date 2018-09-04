@@ -1,2 +1,2 @@
-# gstreamer_opencv_decoder
-tx2+gstreamer+opencv decoder
+# tx2_decode
+tx2 gstreamer ffmpeg opencv decode
