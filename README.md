@@ -19,7 +19,7 @@
 
 #### 	tx2_gstreamer_decoder
 
-​		在tx2上实现基于gstreamer的视频解封装源程序，可以实现对视频文件，USB摄像头，rtsp远程摄像头，tx2板载摄像头的解码
+​		在tx2上实现基于gstreamer的视频解码源程序，可以实现对视频文件，USB摄像头，rtsp远程摄像头，tx2板载摄像头的解码
 
 #### 	brief_summary
 
