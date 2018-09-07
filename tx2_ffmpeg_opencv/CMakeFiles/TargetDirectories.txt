@@ -1,3 +1,0 @@
-/home/nvidia/work/mycode/ffmpeg_opencv/CMakeFiles/edit_cache.dir
-/home/nvidia/work/mycode/ffmpeg_opencv/CMakeFiles/rebuild_cache.dir
-/home/nvidia/work/mycode/ffmpeg_opencv/CMakeFiles/H264Decoder.dir
