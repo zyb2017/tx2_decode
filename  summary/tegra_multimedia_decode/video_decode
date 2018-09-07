@@ -1,0 +1,235 @@
+//本程序主要实现在TX2上基于V4l2实现.H264，H265,VP9编码格式的文件的硬解码
+
+/*伪代码*/
+set_default_parameter()
+{
+    fullscreen = false;
+    window_height = 0;
+    window_width = 0;
+    window_x = 0;
+    window_y = 0;
+    out_pixfmt = 1;
+    fps = 30;
+    memory_type = V4L2_MEMORY_MMAP;
+    vp9_file_header_flag = 0;
+    file_count = 1;
+    dec_fps = 30;
+}
+createVideoDecoder("dec0")
+{
+    fd = v4l2_open("/dev/nvhost-nvdec", flags | O_RDWR);
+    v4l2_ioctl(fd, VIDIOC_QUERYCAP, &caps);//取得设备的capability
+}
+check_set_device_property()
+{
+    if (ctx.input_nalu)
+    {
+        nalu_parse_buffer = new char[CHUNK_SIZE];
+    }
+    else
+    {
+        disableCompleteFrameInputBuffer();
+    }
+    setOutputPlaneFormat();
+    disableDPB();
+    enableMetadataReporting();
+    setSkipFrames(ctx.skip_frames);
+    output_plane.setupPlane();
+    
+}
+setStreamStatus(true)
+{
+    if(true)
+    {
+        v4l2_ioctl(fd, VIDIOC_STREAMON, &buf_type);//start video display
+    }
+    else
+    {
+        v4l2_ioctl(fd, VIDIOC_STREAMOFF, &buf_type);//stop video display
+    }
+}
+dec_capture_loop()
+{
+    query_and_set_capture(ctx);
+    while(!error)
+    {
+        dqEvent(ev, false);//Check for Resolution change again
+        while(1)
+        {
+
+            if (!ctx->disable_rendering && ctx->stats)
+            {   
+                ctx->renderer->render(dec_buffer->planes[0].fd);// EglRenderer requires the fd of the 0th plane to render the buffer
+            }
+            Clip_Stitch();
+            set_transform_params(); 
+            NvBufferTransform();// Convert Blocklinear to PitchLinear               
+            if (!ctx->stats && ctx->out_file)
+            {
+                dump_dmabuf(out_file);// Write raw video frame to file
+            }
+
+        }
+    }
+}
+query_and_set_capture()
+{
+    getFormat(format);
+    getCrop(crop);
+    NvBufferCreateEx (input_params);//Use this method to allocate HW buffer
+    NvEglRenderer::createEglRenderer(window_x,window_y);//display
+    enableProfiling();
+    setFPS(ctx->fps);
+    deinitPlane();//deinitPlane unmaps the buffers and calls REQBUFS with count 0
+    setCapturePlaneFormat(pixelformat,width,height);//updates the class variables
+    getMinimumCapturePlaneBuffers(min_dec_capture_buffers);//Get the minimum buffers which have to be requested on the capture plane
+    setupPlane(V4L2_MEMORY_MMAP);//Request (min + 5) buffers, export and map buffers
+    setStreamStatus(true);             
+    for (uint32_t i = 0; i < getNumBuffers(); i++)
+    {
+         qBuffer(v4l2_buf, NULL);
+    }//Enqueue all the empty capture plane buffers
+
+}
+
+main()
+{
+    set_default_parameter();
+    createVideoDecoder("dec0");
+    check_set_device_property();
+    input_file();
+    dump_dmabuf(ctx->dst_dma_fd, 2, ctx->out_file);
+    setStreamStatus(true);
+    pthread_create(dec_capture_loop);
+    while(incoming_queues=true)
+    {
+        getNthBuffer(i);
+        if (decoder_pixfmt==H264 || decoder_pixfmt ==H265)
+        {
+            if (ctx.input_nalu)
+            {
+                read_decoder_input_nalu();
+            }
+            else
+            {
+                read_decoder_input_chunk();
+            }
+        }
+         if (decoder_pixfmt == VP9)
+        {
+            ret = read_vp9_decoder_input_chunk();
+        }
+        qBuffer(v4l2_buf, NULL);
+    }
+    while(outgoing queues)
+    {
+        dqBuffer();
+        if (enable_input_metadata)
+        {
+            getInputMetadata();
+            report_input_metadata();
+        }
+          if (decoder_pixfmt==H264 || decoder_pixfmt ==H265)
+        {
+            if (ctx.input_nalu)
+            {
+                read_decoder_input_nalu();
+            }
+            else
+            {
+                read_decoder_input_chunk();
+            }
+        }
+         if (decoder_pixfmt == VP9)
+        {
+            ret = read_vp9_decoder_input_chunk();
+        }
+        qBuffer();
+    }
+    while(all_buffer_dequeued)
+    {
+        dqBuffer();
+        if (enable_input_metadata)
+        {
+            getInputMetadata();
+            report_input_metadata();
+        }
+    }
+    cleanup();
+
+}
+
+程序文档：
+v4l2视频采集工作流程:
+   打开设备－> 检查和设置设备属性－> 设置帧格式－> 设置一种输入输出方法（缓冲 区管理）－> 循环获取数据－> 关闭设备
+(1)打开视频设备文件。int fd=open("/dev/nvhost-nvdec",O_RDWR);
+(2)查询视频设备的能力，比如是否具有视频输入,或者音频输入输出等。ioctl(fd_v4l, VIDIOC_QUERYCAP, &cap)
+(3)设置视频采集的参数
+　　设置视频的制式，制式包括PAL/NTSC，使用ioctl(fd_v4l, VIDIOC_S_STD, &std_id)
+　　设置视频图像的采集窗口的大小，使用ioctl(fd_v4l, VIDIOC_S_CROP, &crop)
+　　设置视频帧格式，包括帧的点阵格式，宽度和高度等，使用ioctl(fd_v4l, VIDIOC_S_FMT, &fmt)
+　　设置视频的帧率，使用ioctl(fd_v4l, VIDIOC_S_PARM, &parm)
+　　设置视频的旋转方式，使用ioctl(fd_v4l, VIDIOC_S_CTRL, &ctrl)
+(4)向驱动申请视频流数据的帧缓冲区
+　　请求/申请若干个帧缓冲区，一般为不少于3个,使用ioctl(fd_v4l, VIDIOC_REQBUFS, &req)
+　　查询帧缓冲区在内核空间中的长度和偏移量 ioctl(fd_v4l, VIDIOC_QUERYBUF, &buf)
+(5)应用程序通过内存映射，将帧缓冲区的地址映射到用户空间，这样就可以直接操作采集到的帧了，而不必去复制。
+　　buffers[i].start = mmap (NULL, buffers[i].length, PROT_READ | PROT_WRITE, MAP_SHARED, fd_v4l, buffers[i].offset);
+(6)将申请到的帧缓冲全部放入视频采集输出队列，以便存放采集的数据。ioctl (fd_v4l, VIDIOC_QBUF, &buf)
+(7)开始视频流数据的采集。 ioctl (fd_v4l, VIDIOC_STREAMON, &type)
+(8)驱动将采集到的一帧视频数据存入输入队列第一个帧缓冲区，存完后将该帧缓冲区移至视频采集输出队列。
+(9)应用程序从视频采集输出队列中取出已含有采集数据的帧缓冲区。ioctl (fd_v4l, VIDIOC_DQBUF, &buf) ，应用程序处理该帧缓冲区的原始视频数据。
+(10)处理完后，应用程序的将该帧缓冲区重新排入输入队列,这样便可以循环采集数据。ioctl (fd_v4l, VIDIOC_QBUF, &buf)
+　　重复上述步骤8到10，直到停止采集数据。
+(11)停止视频的采集。ioctl (fd_v4l, VIDIOC_STREAMOFF, &type)
+(12)释放申请的视频帧缓冲区unmap，关闭视频设备文件close(fd_v4l)。
+
+video_decode工作流程以v4l2视频采集为基础，具体流程如下：
+（1）设置相应参数值;
+    set_default_parameter();
+（2）创建解码器;
+    createVideoDecoder("dec0");
+（3）检查设备状态;
+    check_set_device_property();
+（4）订阅分辨率是否改变事件；
+    dqEvent(ev, false);
+（5）判断输入流的方式（nalu or chunk)
+    if (ctx.input_nalu)
+    {
+        read_decoder_input_nalu();
+    }
+    else
+    {
+        read_decoder_input_chunk();
+    }
+（6）设置输出plane的格式；
+    setOutputPlaneFormat();
+（7）使能dpb，metedata,skip_frames；
+    disableDPB();
+    enableMetadataReporting();
+    setSkipFrames(ctx.skip_frames);;
+（8）检查，输出，映射输出Plane的缓存，将解码数据放入缓存
+    output_plane.setupPlane();
+（9）打开输入文件
+    input_file();
+（10）缓冲映射到输出文件
+    dump_dmabuf(ctx->dst_dma_fd, 2, ctx->out_file);
+（11）设置视频输出流显示状态；
+     setStreamStatus(true);
+（12）开启解码线程，等待分辨率改变事件，当有REQBUFS请求时分配合适的缓存，将解码数据放入缓存
+    pthread_create(dec_capture_loop);
+（13）创建视频采集输入队列；
+    incoming_queues
+（14）创建视频采集输出队列；
+    outgoing queues
+    这里定义了两个队列：视频采集输入队列(incoming queues)和视频采集输出队列(outgoing queues)，
+    前者是等待驱动存放视频数据的队列，后者是驱动程序已经放入了视频数据的队列。
+    启动视频采集后，驱动程序开始采集一帧数据，把采集的数据放入视频采集输入队列的第一个帧缓冲区，一帧数据采集完成，
+    也就是第一个帧缓冲区存满一帧数据后，驱动程序将该帧缓冲区移至视频采集输出队列，等待应用程序从输出队列取出。
+    驱动程序接下来采集下一帧数据，放入第二个帧缓冲区，同样帧缓冲区存满下一帧数据后，被放入视频采集输出队列。
+（15）发送EOS
+    send_eos();
+（16）释放内存
+    cleanup();
+
+
